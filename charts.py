@@ -1,107 +1,143 @@
 #!/usr/bin/env python3
 """
-Charts Aggregator - holt aktuelle Charts von FM4, Beatport und anderen Quellen
+Charts Aggregator - holt aktuelle Charts von FM4, Apple Music und anderen Quellen
 und verlinkt die Songs direkt zu Apple Music.
 """
 
 import requests
-from bs4 import BeautifulSoup
-import urllib.parse
 import json
-from datetime import datetime
+import urllib.parse
+from datetime import datetime, timedelta
 
 
 def get_fm4_charts():
-    """Holt die aktuellen FM4 Charts von der ORF/FM4 Website."""
+    """Holt die gespielten Songs aus der FM4 Charts Sendung via ORF API."""
     print("  Lade FM4 Charts...")
     tracks = []
     try:
-        url = "https://fm4.orf.at/charts"
-        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.text, "lxml")
+        # Suche in den letzten 7 Tagen nach der FM4 Charts Sendung (4CH)
+        broadcasts_url = "https://audioapi.orf.at/fm4/api/json/current/broadcasts"
+        r = requests.get(broadcasts_url, timeout=10)
+        data = r.json()
 
-        # FM4 Charts werden als Liste dargestellt
-        items = soup.select(".chart-item, .charts-item, li.item")
-        for i, item in enumerate(items[:20], 1):
-            artist_el = item.select_one(".artist, .chart-artist")
-            title_el = item.select_one(".title, .chart-title, h3, h4")
-            if artist_el and title_el:
-                tracks.append({
-                    "rank": i,
-                    "artist": artist_el.get_text(strip=True),
-                    "title": title_el.get_text(strip=True),
-                })
+        chart_href = None
+        for day in data:
+            for b in day.get("broadcasts", []):
+                if b.get("programKey") == "4CH":
+                    chart_href = b.get("href")
+                    break
+            if chart_href:
+                break
+
+        if not chart_href:
+            raise ValueError("Keine FM4 Charts Sendung gefunden")
+
+        # Hole die einzelnen Songs aus der Sendung
+        r2 = requests.get(chart_href, timeout=10)
+        detail = r2.json()
+        items = detail.get("items", [])
+
+        seen = set()
+        rank = 1
+        for item in items:
+            if item.get("type") == "M" and item.get("interpreter") and item.get("title"):
+                key = (item["interpreter"].lower(), item["title"].lower())
+                if key not in seen:
+                    seen.add(key)
+                    tracks.append({
+                        "rank": rank,
+                        "artist": item["interpreter"],
+                        "title": item["title"],
+                    })
+                    rank += 1
+                    if rank > 20:
+                        break
+
+        print(f"  {len(tracks)} Songs geladen.")
     except Exception as e:
         print(f"  FM4 Fehler: {e}")
 
-    if not tracks:
-        # Fallback: Demo-Daten wenn Scraping fehlschlägt
-        tracks = [
-            {"rank": 1, "artist": "Billie Eilish", "title": "BIRDS OF A FEATHER"},
-            {"rank": 2, "artist": "Sabrina Carpenter", "title": "Espresso"},
-            {"rank": 3, "artist": "Chappell Roan", "title": "Good Luck, Babe!"},
-            {"rank": 4, "artist": "Charli XCX", "title": "360"},
-            {"rank": 5, "artist": "Vampire Weekend", "title": "Mary Boone"},
-        ]
-        print("  (Demo-Daten verwendet)")
     return tracks
 
 
-def get_beatport_charts():
-    """Holt die aktuellen Beatport Top 10 Charts."""
-    print("  Lade Beatport Charts...")
+def get_apple_music_charts(country="at", limit=20):
+    """Holt die offiziellen Apple Music Top Songs Charts."""
+    print(f"  Lade Apple Music Charts ({country.upper()})...")
     tracks = []
     try:
-        url = "https://www.beatport.com/top-100"
-        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.text, "lxml")
-
-        items = soup.select(".track-title, [class*='TrackName'], [data-testid*='track']")
-        for i, item in enumerate(items[:20], 1):
-            text = item.get_text(strip=True)
-            if text:
-                tracks.append({"rank": i, "artist": "—", "title": text})
+        url = f"https://rss.applemarketingtools.com/api/v2/{country}/music/most-played/{limit}/songs.json"
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        results = data.get("feed", {}).get("results", [])
+        for i, item in enumerate(results, 1):
+            tracks.append({
+                "rank": i,
+                "artist": item.get("artistName", "—"),
+                "title": item.get("name", "—"),
+                "apple_music_url": item.get("url", ""),
+            })
+        print(f"  {len(tracks)} Songs geladen.")
     except Exception as e:
-        print(f"  Beatport Fehler: {e}")
+        print(f"  Apple Music Charts Fehler: {e}")
 
-    if not tracks:
-        # Fallback: Demo-Daten
-        tracks = [
-            {"rank": 1, "artist": "Fisher & Aaaron Roan", "title": "Atmosphere"},
-            {"rank": 2, "artist": "Chris Avantgarde", "title": "Siren"},
-            {"rank": 3, "artist": "Anyma", "title": "Welcome To The Opera"},
-            {"rank": 4, "artist": "Innellea", "title": "Vertigo"},
-            {"rank": 5, "artist": "Tale Of Us", "title": "Pleiades"},
-        ]
-        print("  (Demo-Daten verwendet)")
     return tracks
 
 
-def get_apple_music_link(artist, title):
-    """Erstellt einen Apple Music Suchlink für einen Song."""
-    query = f"{artist} {title}"
-    encoded = urllib.parse.quote(query)
-    return f"https://music.apple.com/search?term={encoded}"
+def get_itunes_charts(country="at", limit=20):
+    """Holt iTunes/Apple Music Charts als Backup."""
+    print(f"  Lade iTunes Charts ({country.upper()})...")
+    tracks = []
+    try:
+        url = f"https://itunes.apple.com/{country}/rss/topsongs/limit={limit}/json"
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        entries = data.get("feed", {}).get("entry", [])
+        for i, entry in enumerate(entries, 1):
+            artist = entry.get("im:artist", {}).get("label", "—")
+            title = entry.get("im:name", {}).get("label", "—")
+            link = entry.get("link", {}).get("attributes", {}).get("href", "")
+            tracks.append({"rank": i, "artist": artist, "title": title, "apple_music_url": link})
+        print(f"  {len(tracks)} Songs geladen.")
+    except Exception as e:
+        print(f"  iTunes Fehler: {e}")
+    return tracks
 
 
-def build_html(fm4_charts, beatport_charts):
+def get_apple_music_link(artist, title, existing_url=""):
+    """Gibt einen Apple Music Link zurück (direkt oder Suche)."""
+    if existing_url:
+        return existing_url
+    query = urllib.parse.quote(f"{artist} {title}")
+    return f"https://music.apple.com/search?term={query}"
+
+
+def build_html(sections):
     """Erstellt eine schöne HTML-Seite mit allen Charts."""
     now = datetime.now().strftime("%d.%m.%Y %H:%M")
 
     def chart_rows(tracks):
         rows = ""
         for t in tracks:
-            link = get_apple_music_link(t["artist"], t["title"])
+            link = get_apple_music_link(t["artist"], t["title"], t.get("apple_music_url", ""))
             rows += f"""
         <tr>
           <td class="rank">#{t['rank']}</td>
           <td class="artist">{t['artist']}</td>
           <td class="title">{t['title']}</td>
-          <td><a href="{link}" target="_blank" class="apple-btn">🎵 Apple Music</a></td>
+          <td><a href="{link}" target="_blank" class="apple-btn">&#9835; Apple Music</a></td>
         </tr>"""
         return rows
+
+    sections_html = ""
+    for section in sections:
+        if section["tracks"]:
+            sections_html += f"""
+    <div class="chart-section">
+      <h2>{section['icon']} {section['name']}</h2>
+      <table>
+        <tbody>{chart_rows(section['tracks'])}</tbody>
+      </table>
+    </div>"""
 
     html = f"""<!DOCTYPE html>
 <html lang="de">
@@ -153,6 +189,7 @@ def build_html(fm4_charts, beatport_charts):
       white-space: nowrap;
     }}
     .apple-btn:hover {{ background: #e0353d; }}
+    .no-data {{ color: #555; font-style: italic; padding: 1rem 0; }}
   </style>
 </head>
 <body>
@@ -160,18 +197,7 @@ def build_html(fm4_charts, beatport_charts):
   <p class="updated">Zuletzt aktualisiert: {now}</p>
 
   <div class="charts-grid">
-    <div class="chart-section">
-      <h2>📻 FM4 Charts</h2>
-      <table>
-        <tbody>{chart_rows(fm4_charts)}</tbody>
-      </table>
-    </div>
-    <div class="chart-section">
-      <h2>🎛️ Beatport Top 100</h2>
-      <table>
-        <tbody>{chart_rows(beatport_charts)}</tbody>
-      </table>
-    </div>
+    {sections_html}
   </div>
 </body>
 </html>"""
@@ -184,11 +210,18 @@ def main():
     print("Lade Charts...")
 
     fm4 = get_fm4_charts()
-    beatport = get_beatport_charts()
+    apple_at = get_apple_music_charts(country="at", limit=20)
+    apple_de = get_apple_music_charts(country="de", limit=20)
+
+    sections = [
+        {"name": "FM4 Charts", "icon": "📻", "tracks": fm4},
+        {"name": "Apple Music Österreich", "icon": "🇦🇹", "tracks": apple_at},
+        {"name": "Apple Music Deutschland", "icon": "🇩🇪", "tracks": apple_de},
+    ]
 
     print()
     print("Erstelle charts.html ...")
-    html = build_html(fm4, beatport)
+    html = build_html(sections)
 
     with open("charts.html", "w", encoding="utf-8") as f:
         f.write(html)
@@ -196,13 +229,12 @@ def main():
     print()
     print("✅ Fertig! Öffne 'charts.html' in deinem Browser.")
     print()
-    print("FM4 Top 5:")
-    for t in fm4[:5]:
-        print(f"  #{t['rank']} {t['artist']} – {t['title']}")
-    print()
-    print("Beatport Top 5:")
-    for t in beatport[:5]:
-        print(f"  #{t['rank']} {t['artist']} – {t['title']}")
+    for section in sections:
+        if section["tracks"]:
+            print(f"{section['icon']} {section['name']} Top 3:")
+            for t in section["tracks"][:3]:
+                print(f"  #{t['rank']} {t['artist']} – {t['title']}")
+            print()
 
 
 if __name__ == "__main__":
