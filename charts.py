@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """
-Charts Aggregator - FM4, Apple Music, Electronic Genre Charts mit Hörproben.
+Charts Aggregator — FM4, Ö3, Apple Music AT/DE, Electronic Genre Charts.
 """
 
 import requests
 import json
 import urllib.parse
 import time
+import re
+from html import unescape
 from datetime import datetime
 
+
+# ─── Konfiguration ────────────────────────────────────────────────────────────
 
 ELECTRONIC_GENRES = [
     {"name": "Electronic",  "id": 7},
@@ -19,6 +23,10 @@ ELECTRONIC_GENRES = [
     {"name": "Drum & Bass", "id": 1049},
 ]
 
+HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+
+
+# ─── Hilfsfunktionen ──────────────────────────────────────────────────────────
 
 def get_itunes_info(artist, title, country="at"):
     """Holt Hörprobe und Apple Music App-Link via iTunes Search API."""
@@ -29,77 +37,89 @@ def get_itunes_info(artist, title, country="at"):
         results = r.json().get("results", [])
         if results:
             track_url = results[0].get("trackViewUrl", "")
-            app_url = track_url.replace("https://music.apple.com", "music://music.apple.com")
             return {
                 "preview_url": results[0].get("previewUrl", ""),
-                "app_url": app_url,
+                "app_url": track_url.replace("https://music.apple.com", "music://music.apple.com"),
             }
     except Exception:
         pass
     return {"preview_url": "", "app_url": ""}
 
 
-def get_fm4_charts():
-    """Holt die gespielten Songs aus der FM4 Charts Sendung via ORF API."""
-    print("  Lade FM4 Charts...")
-    tracks = []
-    try:
-        r = requests.get("https://audioapi.orf.at/fm4/api/json/current/broadcasts", timeout=10)
-        data = r.json()
-        chart_href = None
-        for day in data:
-            for b in day.get("broadcasts", []):
-                if b.get("programKey") == "4CH":
-                    chart_href = b.get("href")
-                    break
-            if chart_href:
+def parse_orf_broadcast(program_key, station="fm4"):
+    """Holt Songs aus einer ORF-Broadcast-Sendung (FM4 oder Ö3)."""
+    r = requests.get(f"https://audioapi.orf.at/{station}/api/json/current/broadcasts", timeout=10)
+    data = r.json()
+    href = None
+    for day in data:
+        for b in day.get("broadcasts", []):
+            if b.get("programKey") == program_key:
+                href = b.get("href")
                 break
-
-        if not chart_href:
-            raise ValueError("Keine FM4 Charts Sendung gefunden")
-
-        r2 = requests.get(chart_href, timeout=10)
-        items = r2.json().get("items", [])
-
-        seen = set()
-        rank = 1
-        for item in items:
-            if item.get("type") == "M" and item.get("interpreter") and item.get("title"):
-                key = (item["interpreter"].lower(), item["title"].lower())
-                if key not in seen:
-                    seen.add(key)
-                    info = get_itunes_info(item["interpreter"], item["title"])
-                    time.sleep(0.2)
-                    tracks.append({
-                        "rank": rank,
-                        "artist": item["interpreter"],
-                        "title": item["title"],
-                        "preview_url": info["preview_url"],
-                        "app_url": info["app_url"],
-                    })
-                    rank += 1
-                    if rank > 20:
-                        break
-    except Exception as e:
-        print(f"  FM4 Fehler: {e}")
-    print(f"  {len(tracks)} Songs geladen.")
+        if href:
+            break
+    if not href:
+        raise ValueError(f"Keine Sendung '{program_key}' gefunden")
+    r2 = requests.get(href, timeout=10)
+    items = r2.json().get("items", [])
+    seen, rank, tracks = set(), 1, []
+    for item in items:
+        if item.get("type") == "M" and item.get("interpreter") and item.get("title"):
+            key = (item["interpreter"].lower(), item["title"].lower())
+            if key not in seen:
+                seen.add(key)
+                info = get_itunes_info(item["interpreter"], item["title"])
+                time.sleep(0.15)
+                tracks.append({
+                    "rank": rank,
+                    "artist": item["interpreter"],
+                    "title": item["title"],
+                    "preview_url": info["preview_url"],
+                    "app_url": info["app_url"],
+                })
+                rank += 1
+                if rank > 25:
+                    break
     return tracks
 
 
-def get_apple_music_charts(country="de", limit=20):
-    """Holt die offiziellen Apple Music Top Songs Charts."""
-    label = {"at": "Österreich", "de": "Deutschland"}.get(country, country.upper())
-    print(f"  Lade Apple Music Charts {label}...")
+# ─── Datenquellen ─────────────────────────────────────────────────────────────
+
+def get_fm4_charts():
+    print("  📻 FM4 Charts...")
+    try:
+        tracks = parse_orf_broadcast("4CH", "fm4")
+        print(f"     {len(tracks)} Songs")
+        return tracks
+    except Exception as e:
+        print(f"     Fehler: {e}")
+        return []
+
+
+def get_oe3_top40():
+    print("  📡 Ö3 Austria Top 40...")
+    try:
+        tracks = parse_orf_broadcast("3TOP", "oe3")
+        print(f"     {len(tracks)} Songs")
+        return tracks
+    except Exception as e:
+        print(f"     Fehler: {e}")
+        return []
+
+
+def get_apple_music_charts(country="de"):
+    label = {"at": "Österreich 🇦🇹", "de": "Deutschland 🇩🇪"}.get(country, country)
+    print(f"  🎵 Apple Music {label}...")
     tracks = []
     try:
-        url = f"https://rss.applemarketingtools.com/api/v2/{country}/music/most-played/{limit}/songs.json"
+        url = f"https://rss.applemarketingtools.com/api/v2/{country}/music/most-played/25/songs.json"
         r = requests.get(url, timeout=10)
         results = r.json().get("feed", {}).get("results", [])
         for i, item in enumerate(results, 1):
             artist = item.get("artistName", "—")
             title = item.get("name", "—")
             info = get_itunes_info(artist, title, country)
-            time.sleep(0.2)
+            time.sleep(0.15)
             tracks.append({
                 "rank": i,
                 "artist": artist,
@@ -107,15 +127,13 @@ def get_apple_music_charts(country="de", limit=20):
                 "preview_url": info["preview_url"],
                 "app_url": info["app_url"],
             })
+        print(f"     {len(tracks)} Songs")
     except Exception as e:
-        print(f"  Fehler: {e}")
-    print(f"  {len(tracks)} Songs geladen.")
+        print(f"     Fehler: {e}")
     return tracks
 
 
-def get_electronic_genre_charts(genre_id, genre_name, country="at", limit=20):
-    """Holt iTunes Electronic Genre Charts."""
-    print(f"    {genre_name}...")
+def get_electronic_genre(genre_id, genre_name, country="at", limit=25):
     tracks = []
     try:
         url = f"https://itunes.apple.com/{country}/rss/topsongs/limit={limit}/genre={genre_id}/json"
@@ -127,8 +145,7 @@ def get_electronic_genre_charts(genre_id, genre_name, country="at", limit=20):
             links = entry.get("link", [])
             if isinstance(links, dict):
                 links = [links]
-            app_url = ""
-            preview_url = ""
+            app_url, preview_url = "", ""
             for lnk in links:
                 attrs = lnk.get("attributes", {})
                 href = attrs.get("href", "")
@@ -136,104 +153,81 @@ def get_electronic_genre_charts(genre_id, genre_name, country="at", limit=20):
                     app_url = href.replace("https://music.apple.com", "music://music.apple.com")
                 if attrs.get("im:assetType") == "preview":
                     preview_url = href
-            tracks.append({
-                "rank": i,
-                "artist": artist,
-                "title": title,
-                "preview_url": preview_url,
-                "app_url": app_url,
-            })
+            tracks.append({"rank": i, "artist": artist, "title": title,
+                           "preview_url": preview_url, "app_url": app_url})
     except Exception as e:
-        print(f"    Fehler bei {genre_name}: {e}")
+        print(f"     Fehler bei {genre_name}: {e}")
     return tracks
 
 
 def get_all_electronic_charts():
-    """Lädt alle Electronic Genre Charts."""
-    print("  Lade Electronic Genre Charts...")
+    print("  🎛️  Electronic Genre Charts...")
     result = {}
     for genre in ELECTRONIC_GENRES:
-        result[genre["name"]] = get_electronic_genre_charts(genre["id"], genre["name"])
+        print(f"     {genre['name']}...")
+        result[genre["name"]] = get_electronic_genre(genre["id"], genre["name"])
     return result
 
 
-def build_chart_rows(tracks):
+# ─── HTML Generierung ─────────────────────────────────────────────────────────
+
+def build_rows(tracks):
     rows = ""
     for t in tracks:
         preview = t.get("preview_url", "")
         app_url = t.get("app_url", "")
-
         if preview:
-            preview_btn = f'<button class="preview-btn" onclick="togglePreview(this,\'{preview}\')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio>'
+            play = f'<button class="play-btn" onclick="togglePlay(this,\'{preview}\')" title="Hörprobe"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button><audio preload="none"></audio>'
         else:
-            preview_btn = '<span class="no-preview">—</span>'
-
-        apple_btn = f'<a href="{app_url}" class="apple-btn">&#9835; Apple Music</a>' if app_url else ""
-
+            play = '<span class="no-play"></span>'
+        music = f'<a href="{app_url}" class="music-btn" title="In Apple Music öffnen"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3z"/></svg></a>' if app_url else ""
         rows += f"""<tr>
-          <td class="rank">{t['rank']}</td>
-          <td class="preview-cell">{preview_btn}</td>
-          <td class="artist">{t['artist']}</td>
-          <td class="title">{t['title']}</td>
-          <td>{apple_btn}</td>
-        </tr>"""
+          <td class="td-rank">{t['rank']}</td>
+          <td class="td-play">{play}</td>
+          <td class="td-artist">{t['artist']}</td>
+          <td class="td-title">{t['title']}</td>
+          <td class="td-link">{music}</td>
+        </tr>\n"""
     return rows
 
 
-def build_html(fm4, apple_de, electronic_genres):
+def build_html(all_data):
     now = datetime.now().strftime("%d.%m.%Y %H:%M")
 
-    # FM4 Tabelle
-    fm4_table = f"""
-    <div class="chart-card">
-      <div class="card-header">
-        <span class="card-icon">📻</span>
-        <div>
-          <h2>FM4 Charts</h2>
-          <p class="card-sub">Österreichischer Radiosender</p>
-        </div>
-      </div>
-      <table><tbody>{build_chart_rows(fm4)}</tbody></table>
-    </div>"""
+    # Tab-Definitionen für alle Quellen
+    top_tabs = [
+        {"id": "fm4",       "label": "FM4",             "icon": "📻"},
+        {"id": "oe3",       "label": "Ö3 Top 40",       "icon": "📡"},
+        {"id": "apple_at",  "label": "Apple Music AT",  "icon": "🇦🇹"},
+        {"id": "apple_de",  "label": "Apple Music DE",  "icon": "🇩🇪"},
+        {"id": "electronic","label": "Electronic",       "icon": "🎛️"},
+    ]
 
-    # Apple Music DE Tabelle
-    apple_table = f"""
-    <div class="chart-card">
-      <div class="card-header">
-        <span class="card-icon">🇩🇪</span>
-        <div>
-          <h2>Apple Music Deutschland</h2>
-          <p class="card-sub">Top Songs gerade</p>
-        </div>
-      </div>
-      <table><tbody>{build_chart_rows(apple_de)}</tbody></table>
-    </div>"""
-
-    # Electronic Genre Tabs
-    tab_buttons = ""
+    tab_btns = ""
     tab_panels = ""
-    for i, genre in enumerate(ELECTRONIC_GENRES):
-        active_btn = "active" if i == 0 else ""
-        active_panel = "active" if i == 0 else ""
-        safe_id = genre["name"].replace(" ", "_").replace("&", "and")
-        tab_buttons += f'<button class="tab-btn {active_btn}" onclick="showTab(\'{safe_id}\')" id="btn-{safe_id}">{genre["name"]}</button>'
-        rows = build_chart_rows(electronic_genres.get(genre["name"], []))
-        tab_panels += f'<div class="tab-panel {active_panel}" id="panel-{safe_id}"><table><tbody>{rows}</tbody></table></div>'
 
-    electronic_section = f"""
-    <div class="chart-card wide">
-      <div class="card-header">
-        <span class="card-icon">🎛️</span>
-        <div>
-          <h2>Electronic Charts</h2>
-          <p class="card-sub">Top Songs nach Genre · via iTunes</p>
-        </div>
-      </div>
-      <div class="tab-bar">{tab_buttons}</div>
-      <div class="tab-content">{tab_panels}</div>
-    </div>"""
+    for i, tab in enumerate(top_tabs):
+        active = "active" if i == 0 else ""
+        tid = tab["id"]
+        tab_btns += f'<button class="top-tab {active}" onclick="switchTab(\'{tid}\')" id="ttab-{tid}">{tab["icon"]} {tab["label"]}</button>'
 
-    html = f"""<!DOCTYPE html>
+        if tid == "electronic":
+            sub_btns = ""
+            sub_panels = ""
+            for j, genre in enumerate(ELECTRONIC_GENRES):
+                sid = genre["name"].replace(" ", "_").replace("&", "and")
+                sa = "active" if j == 0 else ""
+                sub_btns += f'<button class="sub-tab {sa}" onclick="switchSub(\'{sid}\')" id="stab-{sid}">{genre["name"]}</button>'
+                rows = build_rows(all_data["electronic"].get(genre["name"], []))
+                sub_panels += f'<div class="sub-panel {sa}" id="spanel-{sid}"><table><tbody>{rows}</tbody></table></div>'
+            panel_content = f'<div class="sub-tab-bar">{sub_btns}</div><div class="sub-panels">{sub_panels}</div>'
+        else:
+            rows = build_rows(all_data.get(tid, []))
+            panel_content = f'<table><tbody>{rows}</tbody></table>'
+
+        tab_panels += f'<div class="top-panel {active}" id="tpanel-{tid}">{panel_content}</div>'
+
+    return f"""<!DOCTYPE html>
 <html lang="de">
 <head>
   <meta charset="UTF-8">
@@ -243,327 +237,374 @@ def build_html(fm4, apple_de, electronic_genres):
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-
     :root {{
-      --bg:        #f5f5f7;
-      --surface:   #ffffff;
-      --border:    #e5e5ea;
-      --text:      #1d1d1f;
-      --sub:       #86868b;
-      --accent:    #0071e3;
-      --accent-hover: #0077ed;
-      --apple-red: #fc3c44;
-      --rank:      #c7c7cc;
-      --shadow:    0 2px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04);
-      --shadow-hover: 0 8px 30px rgba(0,0,0,0.11), 0 2px 8px rgba(0,0,0,0.06);
-      --radius:    16px;
-      --radius-sm: 10px;
+      --bg:       #f2f2f7;
+      --surface:  #ffffff;
+      --border:   rgba(0,0,0,0.08);
+      --text:     #1c1c1e;
+      --sub:      #8e8e93;
+      --accent:   #007aff;
+      --red:      #ff3b30;
+      --rank:     #c7c7cc;
+      --radius:   18px;
+      --shadow:   0 2px 16px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04);
     }}
-
     body {{
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: 'Inter', -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
-      padding: 2.5rem 2rem;
       -webkit-font-smoothing: antialiased;
     }}
 
-    /* Header */
-    header {{
-      max-width: 1400px;
-      margin: 0 auto 2.5rem;
-      display: flex;
-      align-items: baseline;
-      gap: 1.2rem;
-      animation: fadeDown 0.5s ease both;
+    /* ── Topbar ── */
+    .topbar {{
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 0 2rem;
     }}
-    @keyframes fadeDown {{
-      from {{ opacity: 0; transform: translateY(-12px); }}
-      to   {{ opacity: 1; transform: translateY(0); }}
-    }}
-    h1 {{
-      font-size: 2rem;
-      font-weight: 700;
-      letter-spacing: -0.03em;
-      color: var(--text);
-    }}
-    .updated {{
-      font-size: 0.78rem;
-      color: var(--sub);
-      font-weight: 400;
-    }}
-
-    /* Grid */
-    .charts-grid {{
-      max-width: 1400px;
+    .topbar-inner {{
+      max-width: 900px;
       margin: 0 auto;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
-      gap: 1.5rem;
-    }}
-
-    /* Card */
-    .chart-card {{
-      background: var(--surface);
-      border-radius: var(--radius);
-      padding: 1.5rem;
-      box-shadow: var(--shadow);
-      transition: box-shadow 0.25s ease, transform 0.25s ease;
-      animation: fadeUp 0.5s ease both;
-    }}
-    .chart-card:hover {{
-      box-shadow: var(--shadow-hover);
-      transform: translateY(-2px);
-    }}
-    .chart-card.wide {{ grid-column: 1 / -1; }}
-
-    @keyframes fadeUp {{
-      from {{ opacity: 0; transform: translateY(16px); }}
-      to   {{ opacity: 1; transform: translateY(0); }}
-    }}
-    .chart-card:nth-child(1) {{ animation-delay: 0.05s; }}
-    .chart-card:nth-child(2) {{ animation-delay: 0.10s; }}
-    .chart-card:nth-child(3) {{ animation-delay: 0.15s; }}
-
-    .card-header {{
       display: flex;
       align-items: center;
-      gap: 0.85rem;
-      margin-bottom: 1.2rem;
-      padding-bottom: 1rem;
-      border-bottom: 1px solid var(--border);
+      gap: 2rem;
+      height: 56px;
     }}
-    .card-icon {{ font-size: 1.5rem; line-height: 1; }}
-    .card-header h2 {{
-      font-size: 0.95rem;
-      font-weight: 600;
-      letter-spacing: -0.01em;
+    .logo {{
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+      color: var(--text);
     }}
-    .card-sub {{
-      font-size: 0.75rem;
+    .logo span {{ color: var(--accent); }}
+    .updated-badge {{
+      font-size: 0.7rem;
       color: var(--sub);
-      margin-top: 1px;
-      font-weight: 400;
+      background: var(--bg);
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      white-space: nowrap;
     }}
 
-    /* Tabs */
-    .tab-bar {{
+    /* ── Top Tabs ── */
+    .top-tab-bar {{
+      display: flex;
+      gap: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }}
+    .top-tab-bar::-webkit-scrollbar {{ display: none; }}
+    .top-tab {{
+      background: none;
+      border: none;
+      border-bottom: 2.5px solid transparent;
+      color: var(--sub);
+      padding: 0 1rem;
+      height: 56px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      white-space: nowrap;
+      transition: color 0.18s, border-color 0.18s;
+      letter-spacing: -0.01em;
+    }}
+    .top-tab:hover {{ color: var(--text); }}
+    .top-tab.active {{
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }}
+
+    /* ── Content ── */
+    .content {{
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem;
+    }}
+    .top-panel {{ display: none; animation: fadeIn 0.2s ease; }}
+    .top-panel.active {{ display: block; }}
+
+    @keyframes fadeIn {{ from {{ opacity:0; transform:translateY(6px); }} to {{ opacity:1; transform:none; }} }}
+
+    /* ── Sub Tabs (Electronic) ── */
+    .sub-tab-bar {{
       display: flex;
       gap: 0.4rem;
-      margin-bottom: 1.1rem;
+      margin-bottom: 1.2rem;
       flex-wrap: wrap;
     }}
-    .tab-btn {{
-      background: var(--bg);
+    .sub-tab {{
+      background: var(--surface);
       border: none;
       color: var(--sub);
-      padding: 0.35rem 0.85rem;
+      padding: 0.4rem 1rem;
       border-radius: 20px;
       cursor: pointer;
       font-size: 0.78rem;
       font-weight: 500;
       font-family: 'Inter', sans-serif;
-      letter-spacing: -0.01em;
-      transition: background 0.18s ease, color 0.18s ease, transform 0.15s ease;
+      transition: background 0.15s, color 0.15s, transform 0.15s;
+      box-shadow: var(--shadow);
     }}
-    .tab-btn:hover {{
-      background: #e5e5ea;
-      color: var(--text);
-      transform: scale(1.03);
+    .sub-tab:hover {{ color: var(--text); transform: scale(1.03); }}
+    .sub-tab.active {{ background: var(--accent); color: #fff; }}
+    .sub-panel {{ display: none; animation: fadeIn 0.18s ease; }}
+    .sub-panel.active {{ display: block; }}
+
+    /* ── Section Header ── */
+    .section-header {{
+      display: flex;
+      align-items: baseline;
+      gap: 0.6rem;
+      margin-bottom: 1rem;
     }}
-    .tab-btn.active {{
-      background: var(--accent);
-      color: #fff;
-      transform: scale(1.0);
+    .section-title {{
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
     }}
-    .tab-panel {{ display: none; }}
-    .tab-panel.active {{ display: block; animation: fadeIn 0.2s ease; }}
-    @keyframes fadeIn {{
-      from {{ opacity: 0; }}
-      to   {{ opacity: 1; }}
+    .section-sub {{
+      font-size: 0.78rem;
+      color: var(--sub);
+      font-weight: 400;
     }}
 
-    /* Tabelle */
+    /* ── Tabelle ── */
+    .card {{
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }}
     table {{ width: 100%; border-collapse: collapse; }}
-    tr {{
-      transition: background 0.15s ease;
-      border-radius: var(--radius-sm);
-    }}
+    tr {{ transition: background 0.12s; }}
     tr:not(:last-child) td {{ border-bottom: 1px solid var(--border); }}
-    tr:hover {{ background: #f5f5f7; }}
-    td {{ padding: 0.6rem 0.5rem; font-size: 0.855rem; vertical-align: middle; }}
+    tr:hover {{ background: #f9f9fb; }}
+    td {{ padding: 0.65rem 0.75rem; vertical-align: middle; }}
 
-    .rank {{
-      width: 32px;
-      font-size: 0.72rem;
+    .td-rank {{
+      width: 36px;
+      font-size: 0.7rem;
       font-weight: 600;
       color: var(--rank);
-      letter-spacing: 0.02em;
+      text-align: right;
+      padding-right: 0.5rem;
     }}
-    .preview-cell {{ width: 38px; }}
+    .td-play {{ width: 40px; }}
+    .td-artist {{
+      width: 30%;
+      font-size: 0.82rem;
+      color: var(--sub);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 180px;
+    }}
+    .td-title {{
+      font-size: 0.88rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+    }}
+    .td-link {{ width: 44px; text-align: right; padding-right: 0.75rem; }}
 
-    .preview-btn {{
+    /* ── Play Button ── */
+    .play-btn {{
       width: 30px; height: 30px;
       border-radius: 50%;
       border: none;
       background: var(--bg);
       color: var(--accent);
       cursor: pointer;
-      font-size: 0.65rem;
       display: flex; align-items: center; justify-content: center;
-      transition: background 0.18s ease, transform 0.15s ease, box-shadow 0.18s ease;
+      transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
       flex-shrink: 0;
     }}
-    .preview-btn:hover {{
+    .play-btn svg {{ width: 14px; height: 14px; }}
+    .play-btn:hover {{
       background: var(--accent);
       color: #fff;
-      transform: scale(1.1);
-      box-shadow: 0 4px 12px rgba(0,113,227,0.3);
+      transform: scale(1.12);
+      box-shadow: 0 4px 14px rgba(0,122,255,0.3);
     }}
-    .preview-btn.playing {{
+    .play-btn.playing {{
       background: var(--accent);
       color: #fff;
-      box-shadow: 0 4px 12px rgba(0,113,227,0.35);
-      animation: pulse 1.4s ease infinite;
+      animation: pulsate 1.6s ease infinite;
     }}
-    @keyframes pulse {{
-      0%, 100% {{ box-shadow: 0 4px 12px rgba(0,113,227,0.35); }}
-      50%       {{ box-shadow: 0 4px 20px rgba(0,113,227,0.55); }}
+    @keyframes pulsate {{
+      0%,100% {{ box-shadow: 0 0 0 0 rgba(0,122,255,0.4); }}
+      50%      {{ box-shadow: 0 0 0 7px rgba(0,122,255,0); }}
     }}
-    .no-preview {{ color: var(--border); font-size: 0.8rem; padding-left: 6px; }}
+    .no-play {{ display: inline-block; width: 30px; }}
 
-    .artist {{
-      color: var(--sub);
-      font-weight: 400;
-      width: 30%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      max-width: 160px;
-    }}
-    .title {{
-      font-weight: 500;
-      color: var(--text);
-      letter-spacing: -0.01em;
-    }}
-
-    .apple-btn {{
-      display: inline-flex;
-      align-items: center;
-      gap: 0.3rem;
-      background: var(--apple-red);
-      color: #fff;
+    /* ── Music Link ── */
+    .music-btn {{
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: var(--bg);
+      color: var(--red);
       text-decoration: none;
-      padding: 0.25rem 0.75rem;
-      border-radius: 20px;
-      font-size: 0.75rem;
+      transition: background 0.15s, transform 0.15s;
+    }}
+    .music-btn svg {{ width: 14px; height: 14px; }}
+    .music-btn:hover {{
+      background: var(--red);
+      color: #fff;
+      transform: scale(1.12);
+    }}
+
+    /* ── Nowplaying Bar ── */
+    #nowplaying {{
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border);
+      padding: 0.75rem 2rem;
+      display: none;
+      align-items: center;
+      gap: 1rem;
+      z-index: 200;
+      animation: slideUp 0.25s ease;
+    }}
+    #nowplaying.visible {{ display: flex; }}
+    @keyframes slideUp {{ from {{ transform: translateY(100%); }} to {{ transform: none; }} }}
+    #np-dot {{
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulsate 1.6s ease infinite;
+      flex-shrink: 0;
+    }}
+    #np-text {{
+      font-size: 0.82rem;
       font-weight: 500;
-      white-space: nowrap;
-      font-family: 'Inter', sans-serif;
-      transition: opacity 0.15s ease, transform 0.15s ease;
+      letter-spacing: -0.01em;
+      flex: 1;
     }}
-    .apple-btn:hover {{
-      opacity: 0.88;
-      transform: scale(1.04);
+    #np-stop {{
+      background: none;
+      border: none;
+      font-size: 1.1rem;
+      cursor: pointer;
+      color: var(--sub);
+      padding: 0.2rem 0.4rem;
+      border-radius: 6px;
+      transition: color 0.15s, background 0.15s;
     }}
+    #np-stop:hover {{ color: var(--red); background: #fff0ef; }}
   </style>
 </head>
 <body>
-  <header>
-    <h1>Charts Aggregator</h1>
-    <span class="updated">Aktualisiert: {now}</span>
-  </header>
 
-  <div class="charts-grid">
-    {fm4_table}
-    {apple_table}
-    {electronic_section}
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="logo">Charts<span>.</span></div>
+      <span class="updated-badge">↻ {now}</span>
+      <nav class="top-tab-bar" style="margin-left:auto">
+        {tab_btns}
+      </nav>
+    </div>
+  </div>
+
+  <div class="content">
+    {tab_panels}
+  </div>
+
+  <div id="nowplaying">
+    <div id="np-dot"></div>
+    <div id="np-text">–</div>
+    <button id="np-stop" onclick="stopAll()" title="Stop">⏹</button>
   </div>
 
   <script>
-    let currentAudio = null;
-    let currentBtn = null;
+    let curAudio = null, curBtn = null, curArtist = '', curTitle = '';
 
-    function togglePreview(btn, url) {{
-      if (currentAudio && currentBtn === btn) {{
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-        btn.innerHTML = '&#9654;';
-        btn.classList.remove('playing');
-        currentAudio = null; currentBtn = null;
-        return;
+    function stopAll() {{
+      if (curAudio) {{
+        curAudio.pause(); curAudio.currentTime = 0;
+        curBtn.classList.remove('playing');
+        curBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+        curAudio = null; curBtn = null;
       }}
-      if (currentAudio) {{
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-        currentBtn.innerHTML = '&#9654;';
-        currentBtn.classList.remove('playing');
+      document.getElementById('nowplaying').classList.remove('visible');
+    }}
+
+    function togglePlay(btn, url) {{
+      if (curAudio && curBtn === btn) {{ stopAll(); return; }}
+      if (curAudio) {{
+        curAudio.pause(); curAudio.currentTime = 0;
+        curBtn.classList.remove('playing');
+        curBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
       }}
       const audio = btn.nextElementSibling;
       audio.src = url;
       audio.play();
-      btn.innerHTML = '&#9646;&#9646;';
       btn.classList.add('playing');
-      currentAudio = audio; currentBtn = btn;
-      audio.onended = () => {{
-        btn.innerHTML = '&#9654;';
-        btn.classList.remove('playing');
-        currentAudio = null; currentBtn = null;
-      }};
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
+      curAudio = audio; curBtn = btn;
+
+      const row = btn.closest('tr');
+      const artist = row.querySelector('.td-artist')?.textContent.trim() || '';
+      const title  = row.querySelector('.td-title')?.textContent.trim() || '';
+      document.getElementById('np-text').textContent = artist ? artist + ' – ' + title : title;
+      document.getElementById('nowplaying').classList.add('visible');
+
+      audio.onended = () => stopAll();
     }}
 
-    function showTab(id) {{
-      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById('panel-' + id).classList.add('active');
-      document.getElementById('btn-' + id).classList.add('active');
-      if (currentAudio) {{
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-        currentBtn.innerHTML = '&#9654;';
-        currentBtn.classList.remove('playing');
-        currentAudio = null; currentBtn = null;
-      }}
+    function switchTab(id) {{
+      document.querySelectorAll('.top-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.top-tab').forEach(b => b.classList.remove('active'));
+      document.getElementById('tpanel-' + id).classList.add('active');
+      document.getElementById('ttab-' + id).classList.add('active');
+      stopAll();
+    }}
+
+    function switchSub(id) {{
+      document.querySelectorAll('.sub-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.sub-tab').forEach(b => b.classList.remove('active'));
+      document.getElementById('spanel-' + id).classList.add('active');
+      document.getElementById('stab-' + id).classList.add('active');
+      stopAll();
     }}
   </script>
 </body>
 </html>"""
-    return html
 
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    print("=== Charts Aggregator ===")
-    print()
-    print("Lade Charts (dauert ~2 Minuten wegen Hörproben-Suche)...")
-    print()
+    print("=== Charts Aggregator ===\n")
+    print("Lade alle Quellen...\n")
 
-    print("📻 FM4:")
-    fm4 = get_fm4_charts()
-    print()
+    all_data = {
+        "fm4":       get_fm4_charts(),
+        "oe3":       get_oe3_top40(),
+        "apple_at":  get_apple_music_charts("at"),
+        "apple_de":  get_apple_music_charts("de"),
+        "electronic": get_all_electronic_charts(),
+    }
 
-    print("🇩🇪 Apple Music DE:")
-    apple_de = get_apple_music_charts(country="de", limit=20)
-    print()
-
-    print("🎛️ Electronic Genre Charts:")
-    electronic = get_all_electronic_charts()
-    print()
-
-    print("Erstelle charts.html ...")
-    html = build_html(fm4, apple_de, electronic)
+    print("\nErstelle charts.html...")
+    html = build_html(all_data)
     with open("charts.html", "w", encoding="utf-8") as f:
         f.write(html)
 
-    print()
-    print("✅ Fertig! Öffne charts.html in deinem Browser.")
-    total_songs = len(fm4) + len(apple_de) + sum(len(v) for v in electronic.values())
-    with_preview = (
-        sum(1 for t in fm4 if t.get("preview_url")) +
-        sum(1 for t in apple_de if t.get("preview_url")) +
-        sum(1 for v in electronic.values() for t in v if t.get("preview_url"))
-    )
-    print(f"   {total_songs} Songs insgesamt, {with_preview} mit Hörprobe")
+    total = sum(len(v) for v in all_data.values() if isinstance(v, list))
+    total += sum(len(t) for t in all_data["electronic"].values())
+    print(f"\n✅ Fertig! {total} Songs geladen.")
+    print("   Öffne charts.html in deinem Browser.\n")
 
 
 if __name__ == "__main__":
