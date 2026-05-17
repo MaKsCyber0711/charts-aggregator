@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Charts Aggregator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #f5f5f7;
+      --surface:   #ffffff;
+      --border:    #e5e5ea;
+      --text:      #1d1d1f;
+      --sub:       #86868b;
+      --accent:    #0071e3;
+      --accent-hover: #0077ed;
+      --apple-red: #fc3c44;
+      --rank:      #c7c7cc;
+      --shadow:    0 2px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04);
+      --shadow-hover: 0 8px 30px rgba(0,0,0,0.11), 0 2px 8px rgba(0,0,0,0.06);
+      --radius:    16px;
+      --radius-sm: 10px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2.5rem 2rem;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header */
+    header {
+      max-width: 1400px;
+      margin: 0 auto 2.5rem;
+      display: flex;
+      align-items: baseline;
+      gap: 1.2rem;
+      animation: fadeDown 0.5s ease both;
+    }
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+    .updated {
+      font-size: 0.78rem;
+      color: var(--sub);
+      font-weight: 400;
+    }
+
+    /* Grid */
+    .charts-grid {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+      gap: 1.5rem;
+    }
+
+    /* Card */
+    .chart-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+      transition: box-shadow 0.25s ease, transform 0.25s ease;
+      animation: fadeUp 0.5s ease both;
+    }
+    .chart-card:hover {
+      box-shadow: var(--shadow-hover);
+      transform: translateY(-2px);
+    }
+    .chart-card.wide { grid-column: 1 / -1; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .chart-card:nth-child(1) { animation-delay: 0.05s; }
+    .chart-card:nth-child(2) { animation-delay: 0.10s; }
+    .chart-card:nth-child(3) { animation-delay: 0.15s; }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      margin-bottom: 1.2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-icon { font-size: 1.5rem; line-height: 1; }
+    .card-header h2 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .card-sub {
+      font-size: 0.75rem;
+      color: var(--sub);
+      margin-top: 1px;
+      font-weight: 400;
+    }
+
+    /* Tabs */
+    .tab-bar {
+      display: flex;
+      gap: 0.4rem;
+      margin-bottom: 1.1rem;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: var(--bg);
+      border: none;
+      color: var(--sub);
+      padding: 0.35rem 0.85rem;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      letter-spacing: -0.01em;
+      transition: background 0.18s ease, color 0.18s ease, transform 0.15s ease;
+    }
+    .tab-btn:hover {
+      background: #e5e5ea;
+      color: var(--text);
+      transform: scale(1.03);
+    }
+    .tab-btn.active {
+      background: var(--accent);
+      color: #fff;
+      transform: scale(1.0);
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    /* Tabelle */
+    table { width: 100%; border-collapse: collapse; }
+    tr {
+      transition: background 0.15s ease;
+      border-radius: var(--radius-sm);
+    }
+    tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+    tr:hover { background: #f5f5f7; }
+    td { padding: 0.6rem 0.5rem; font-size: 0.855rem; vertical-align: middle; }
+
+    .rank {
+      width: 32px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--rank);
+      letter-spacing: 0.02em;
+    }
+    .preview-cell { width: 38px; }
+
+    .preview-btn {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      border: none;
+      background: var(--bg);
+      color: var(--accent);
+      cursor: pointer;
+      font-size: 0.65rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.18s ease, transform 0.15s ease, box-shadow 0.18s ease;
+      flex-shrink: 0;
+    }
+    .preview-btn:hover {
+      background: var(--accent);
+      color: #fff;
+      transform: scale(1.1);
+      box-shadow: 0 4px 12px rgba(0,113,227,0.3);
+    }
+    .preview-btn.playing {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(0,113,227,0.35);
+      animation: pulse 1.4s ease infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 4px 12px rgba(0,113,227,0.35); }
+      50%       { box-shadow: 0 4px 20px rgba(0,113,227,0.55); }
+    }
+    .no-preview { color: var(--border); font-size: 0.8rem; padding-left: 6px; }
+
+    .artist {
+      color: var(--sub);
+      font-weight: 400;
+      width: 30%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 160px;
+    }
+    .title {
+      font-weight: 500;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+
+    .apple-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      background: var(--apple-red);
+      color: #fff;
+      text-decoration: none;
+      padding: 0.25rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      white-space: nowrap;
+      font-family: 'Inter', sans-serif;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .apple-btn:hover {
+      opacity: 0.88;
+      transform: scale(1.04);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Charts Aggregator</h1>
+    <span class="updated">Aktualisiert: 17.05.2026 07:12</span>
+  </header>
+
+  <div class="charts-grid">
+    
+    <div class="chart-card">
+      <div class="card-header">
+        <span class="card-icon">📻</span>
+        <div>
+          <h2>FM4 Charts</h2>
+          <p class="card-sub">Österreichischer Radiosender</p>
+        </div>
+      </div>
+      <table><tbody><tr>
+          <td class="rank">1</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/eb/04/78/eb047884-b485-fc57-f5e7-7c3be2ae6149/mzaf_6896651200425319753.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Towa Bird</td>
+          <td class="title">Gentleman</td>
+          <td><a href="music://music.apple.com/at/album/gentleman/6766332603?i=6766332605&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">2</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/e1/87/96/e1879607-bcce-1d19-7ffa-da5fca54c5a7/mzaf_16744758907778654909.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Y2K & Ro Ransom</td>
+          <td class="title">Hot Like Yea</td>
+          <td><a href="music://music.apple.com/at/album/hot-like-yea/1859997131?i=1859997132&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">3</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/85/17/95/8517953e-5556-841d-0426-ec8e0ab14889/mzaf_7997548608548370864.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">luisa schweig</td>
+          <td class="title">rotkreiden mund</td>
+          <td><a href="music://music.apple.com/at/album/rotkreiden-mund/1878080789?i=1878080792&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">4</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/2f/93/04/2f93042a-60b5-bada-ee28-f186c0f99895/mzaf_4975738069206742983.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">luisa schweig</td>
+          <td class="title">HERZSCHMERZ</td>
+          <td><a href="music://music.apple.com/at/album/herzschmerz/1896226475?i=6766180156&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">5</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/0b/6e/a3/0b6ea3ee-b771-47ac-85a2-2766bd7a55fe/mzaf_6767501723581442522.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Dominic Fike</td>
+          <td class="title">Babydoll</td>
+          <td><a href="music://music.apple.com/at/album/babydoll/1494065882?i=1494066120&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">6</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/8f/9d/55/8f9d559e-b4ed-efc3-f544-a03d8cfc1b94/mzaf_15137727841319331319.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Kids don't smoke</td>
+          <td class="title">Seventeen</td>
+          <td><a href="music://music.apple.com/at/album/seventeen/1871729231?i=1871729232&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">7</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/1e/88/0a/1e880a3a-6a7c-cc4c-a426-99d3c4c8dad9/mzaf_16806425145618504695.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">TOMORA</td>
+          <td class="title">SOMEWHERE ELSE</td>
+          <td><a href="music://music.apple.com/at/album/somewhere-else/1871184398?i=1871185070&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">8</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/71/5d/31/715d3169-5fba-a0b7-da24-2aefc83796cf/mzaf_8089500935177582820.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Tame Impala</td>
+          <td class="title">Dracula</td>
+          <td><a href="music://music.apple.com/at/album/dracula/1842444456?i=1842444457&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">9</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/65/cb/83/65cb8305-62a3-704d-be5d-a9171334e783/mzaf_14840216525442077510.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Jungle</td>
+          <td class="title">Carry On</td>
+          <td><a href="music://music.apple.com/at/album/carry-on/1886730527?i=1886730539&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">10</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/5c/67/cb/5c67cbb9-97ca-526f-2110-a0e2efbf88f3/mzaf_13920733716061626439.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Rahel</td>
+          <td class="title">weidentier</td>
+          <td><a href="music://music.apple.com/at/album/weidentier/1896248090?i=6766238786&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">11</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/26/cd/c7/26cdc7da-b63e-a1e8-d86c-f5d746172e5c/mzaf_12461149150970109921.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">FARCE</td>
+          <td class="title">Big Swiss</td>
+          <td><a href="music://music.apple.com/at/album/big-swiss/1878302189?i=1878302191&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">12</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/96/0e/4d/960e4d6a-d108-cd72-eaaf-831ccae5df4a/mzaf_12267901263111900050.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Lahra</td>
+          <td class="title">Without You</td>
+          <td><a href="music://music.apple.com/at/album/without-you/1747949161?i=1747950148&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">13</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/44/e2/44/44e2441a-6592-abd9-ef71-6206fe55e660/mzaf_17008466890720458264.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Hidden Gemz</td>
+          <td class="title">Small City</td>
+          <td><a href="music://music.apple.com/at/album/sunset-to-sunrise/6766662697?i=6766662974&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">14</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/d1/43/88/d14388eb-0e66-4fb4-b703-d3e4a6f1ccd4/mzaf_4543891908997363528.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">WOLFISH</td>
+          <td class="title">wanna be ur fool</td>
+          <td><a href="music://music.apple.com/at/album/wanna-be-ur-fool/1892901362?i=1892901363&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">15</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/10/0a/8e/100a8ebe-bfa1-0412-9ac2-f48e557317db/mzaf_15457987272658476265.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Magda</td>
+          <td class="title">Wieso</td>
+          <td><a href="music://music.apple.com/at/album/wieso/1891383268?i=1891383272&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">16</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/ca/65/f4/ca65f4e1-6fef-67c7-9ace-f9403b1ab709/mzaf_5092349460251541747.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Kobrakasino</td>
+          <td class="title">die schlange</td>
+          <td><a href="music://music.apple.com/at/album/die-schlange/1878359793?i=1878359804&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">17</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/0b/c2/76/0bc276e2-644c-cbe5-08d1-c8abc7c20f7f/mzaf_3101773445179212642.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Ben Kidson ft. Good Health Good Wealth</td>
+          <td class="title">life's relentless</td>
+          <td><a href="music://music.apple.com/at/album/lifes-relentless/1889817542?i=1889817546&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">18</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/28/f2/f9/28f2f9ff-ec32-325a-9060-01000b7ea948/mzaf_13511355835680317235.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Filiah</td>
+          <td class="title">Method Acting</td>
+          <td><a href="music://music.apple.com/at/album/method-acting/1888189994?i=1888189999&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">19</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/92/15/b6/9215b69c-c1f2-779e-5cb5-ef4e83a9afc3/mzaf_17698643671969325593.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Arkells ft. GROUPLOVE</td>
+          <td class="title">Ride</td>
+          <td><a href="music://music.apple.com/at/album/ride-feat-grouplove/1870388273?i=1870388279&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">20</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/f8/f4/9b/f8f49be4-9152-4670-f6b2-37dc542f0e09/mzaf_11563052084401759775.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Nia Archives</td>
+          <td class="title">Boys In Blue</td>
+          <td><a href="music://music.apple.com/at/album/boys-in-blue/1892436329?i=1892436920&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr></tbody></table>
+    </div>
+    
+    <div class="chart-card">
+      <div class="card-header">
+        <span class="card-icon">🇩🇪</span>
+        <div>
+          <h2>Apple Music Deutschland</h2>
+          <p class="card-sub">Top Songs gerade</p>
+        </div>
+      </div>
+      <table><tbody><tr>
+          <td class="rank">1</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/80/71/b5/8071b554-51a0-5532-6412-7184e8bcec97/mzaf_1442505963957749569.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Justin Bieber</td>
+          <td class="title">Beauty and a Beat (feat. Nicki Minaj)</td>
+          <td><a href="music://music.apple.com/de/album/beauty-and-a-beat-feat-nicki-minaj/1440804754?i=1440805856&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">2</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/dc/bc/8a/dcbc8a3e-4ce1-c00d-cc02-eda2212053c7/mzaf_8347559338388601510.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Michael Jackson</td>
+          <td class="title">Billie Jean</td>
+          <td><a href="music://music.apple.com/de/album/billie-jean/269572838?i=269573364&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">3</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/67/29/e7/6729e7a2-80a5-4e71-ffe1-73441a63d525/mzaf_2829994467836192279.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">PASHANIM, AK AUSSERKONTROLLE & Selim61</td>
+          <td class="title">Prada Sport</td>
+          <td><a href="music://music.apple.com/de/album/prada-sport/6768408549?i=6768408550&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">4</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/17/6c/29/176c29b4-2bfc-e79a-8e9e-a066d8928f8c/mzaf_1568051961098312212.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Drake</td>
+          <td class="title">Make Them Cry</td>
+          <td><a href="music://music.apple.com/de/album/make-them-cry/6769649287?i=6769649298&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">5</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/1e/ce/c2/1ecec239-a7f5-1cbe-e0b0-5d7ca2089779/mzaf_15720556376409377175.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Drake, Future & Molly Santana</td>
+          <td class="title">Ran To Atlanta</td>
+          <td><a href="music://music.apple.com/de/album/ran-to-atlanta/6769649287?i=6769649577&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">6</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/77/52/6a/77526a57-f53f-b8ba-bdc7-e74e242c7c55/mzaf_11538198025885549610.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Zara Larsson</td>
+          <td class="title">Lush Life</td>
+          <td><a href="music://music.apple.com/de/album/lush-life/1201058048?i=1201058113&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">7</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/c6/d7/d1/c6d7d1ec-84e6-ef8a-e02a-70d0ebb556be/mzaf_12941739828801829931.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Drake</td>
+          <td class="title">Janice STFU</td>
+          <td><a href="music://music.apple.com/de/album/janice-stfu/6769649287?i=6769649576&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">8</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/bf/b9/19/bfb919e7-71ce-7dcc-5153-f1d0a55393c7/mzaf_12434464070158687599.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Drake</td>
+          <td class="title">Whisper My Name</td>
+          <td><a href="music://music.apple.com/de/album/whisper-my-name/6769649287?i=6769649303&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">9</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/16/04/63/160463ef-20fb-2e17-3b7b-1d916ea40fd2/mzaf_3195755801559110536.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Drake</td>
+          <td class="title">National Treasures</td>
+          <td><a href="music://music.apple.com/de/album/national-treasures/6769649287?i=6769649582&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">10</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview112/v4/17/48/da/1748dac1-14e9-870b-54fc-85778a4d9420/mzaf_10368611300062944605.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Green Day</td>
+          <td class="title">Boulevard of Broken Dreams</td>
+          <td><a href="music://music.apple.com/de/album/boulevard-of-broken-dreams/1654696614?i=1654696615&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">11</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/e8/52/4a/e8524a16-44ff-0af8-bc24-298f528364b8/mzaf_538195082912149834.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Drake</td>
+          <td class="title">Dust</td>
+          <td><a href="music://music.apple.com/de/album/dust/6769649287?i=6769649302&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">12</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/5c/95/cf/5c95cf3a-bef3-97e7-b6aa-3adde55deb30/mzaf_15328769143459778457.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">The Killers</td>
+          <td class="title">Mr. Brightside</td>
+          <td><a href="music://music.apple.com/de/album/mr-brightside/1526194184?i=1526194192&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">13</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/b9/00/5c/b9005c47-45de-a5cb-e9ac-f8af66d69f33/mzaf_18175355208890397177.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Dominic Fike</td>
+          <td class="title">Babydoll</td>
+          <td><a href="music://music.apple.com/de/album/babydoll/1438243719?i=1438243880&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">14</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/fd/7f/fa/fd7ffaf1-1790-1b8d-9ba2-840b1d001fac/mzaf_9744536527102695989.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Drake</td>
+          <td class="title">2 Hard 4 The Radio</td>
+          <td><a href="music://music.apple.com/de/album/2-hard-4-the-radio/6769649287?i=6769649595&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">15</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/f5/5e/57/f55e579b-4598-e298-f585-03dfd3b9951c/mzaf_17667839459904209421.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Drake</td>
+          <td class="title">Shabang</td>
+          <td><a href="music://music.apple.com/de/album/shabang/6769649287?i=6769649578&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">16</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/ea/94/ee/ea94eedd-d54e-378a-d8f2-5680e25d54c4/mzaf_8200437490052291889.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Taylor Swift</td>
+          <td class="title">The Fate of Ophelia</td>
+          <td><a href="music://music.apple.com/de/album/the-fate-of-ophelia/1843998665?i=1843998668&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">17</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/83/d9/4e/83d94ed3-4d6b-764f-737d-47ae72c702a9/mzaf_17025548516336211460.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Tame Impala & JENNIE</td>
+          <td class="title">Dracula (JENNIE Remix)</td>
+          <td><a href="music://music.apple.com/de/album/dracula-jennie-remix-instrumental/1895858156?i=6764633520&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">18</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/74/06/99/740699a4-79d6-0adb-eedd-bc2bd11071ea/mzaf_16819222938053497617.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Drake</td>
+          <td class="title">Plot Twist</td>
+          <td><a href="music://music.apple.com/de/album/plot-twist/6769649287?i=6769649590&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">19</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/09/ba/35/09ba359b-0e4b-17e7-3738-b59353f72841/mzaf_17941044474969674401.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Drake</td>
+          <td class="title">Make Them Pay</td>
+          <td><a href="music://music.apple.com/de/album/make-them-pay/6769649287?i=6769649579&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">20</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/3e/50/e2/3e50e2ae-df50-0c2f-1c61-952ab960666c/mzaf_14660886360464652553.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">MDB</td>
+          <td class="title">Angels Above Me</td>
+          <td><a href="music://music.apple.com/de/album/angels-above-me/6765500208?i=6765500209&uo=4" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr></tbody></table>
+    </div>
+    
+    <div class="chart-card wide">
+      <div class="card-header">
+        <span class="card-icon">🎛️</span>
+        <div>
+          <h2>Electronic Charts</h2>
+          <p class="card-sub">Top Songs nach Genre · via iTunes</p>
+        </div>
+      </div>
+      <div class="tab-bar"><button class="tab-btn active" onclick="showTab('Electronic')" id="btn-Electronic">Electronic</button><button class="tab-btn " onclick="showTab('Dance')" id="btn-Dance">Dance</button><button class="tab-btn " onclick="showTab('House')" id="btn-House">House</button><button class="tab-btn " onclick="showTab('Techno')" id="btn-Techno">Techno</button><button class="tab-btn " onclick="showTab('Trance')" id="btn-Trance">Trance</button><button class="tab-btn " onclick="showTab('Drum_and_Bass')" id="btn-Drum_and_Bass">Drum & Bass</button></div>
+      <div class="tab-content"><div class="tab-panel active" id="panel-Electronic"><table><tbody><tr>
+          <td class="rank">1</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/fc/c5/fd/fcc5fd9a-529c-7fa4-bced-3b479fe1faac/mzaf_11512006812685331235.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Josh Fawaz</td>
+          <td class="title">Like a Prayer</td>
+          <td><a href="music://music.apple.com/at/album/like-a-prayer/1892983043?i=1892983044&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">2</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/c6/d7/3b/c6d73b63-4637-f235-d600-b765c98132f2/mzaf_2201017837255706089.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Par-T-One</td>
+          <td class="title">I'm so Crazy (Armonica Remix)</td>
+          <td><a href="music://music.apple.com/at/album/im-so-crazy-armonica-remix/1729650466?i=1729650917&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">3</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/53/cc/3a/53cc3a3f-50e1-205f-0aa3-c60dd785b925/mzaf_4785986073893670425.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Fort Nowhere</td>
+          <td class="title">The Times They Are A-Changin'</td>
+          <td><a href="music://music.apple.com/at/album/the-times-they-are-a-changin/1491068561?i=1491068626&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">4</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/0d/ba/aa/0dbaaac7-b499-d39b-1327-af6b58a5c798/mzaf_2554417316196997760.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">DJ.ILHAM</td>
+          <td class="title">Big Boom</td>
+          <td><a href="music://music.apple.com/at/album/big-boom/6769128062?i=6769128066&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">5</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/26/97/b7/2697b758-159a-6761-4377-dddbe9de931f/mzaf_18119541116360248786.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Schrotthagen</td>
+          <td class="title">I Wanna Feel Alive</td>
+          <td><a href="music://music.apple.com/at/album/i-wanna-feel-alive/6766565493?i=6766565925&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">6</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/c9/7f/a0/c97fa086-aa7e-1d3a-71c6-3c5c1aa7bca0/mzaf_1821207175551148046.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Luca-Dante Spadafora & Beats By Luca</td>
+          <td class="title">BASS BASS BASS</td>
+          <td><a href="music://music.apple.com/at/album/bass-bass-bass/1895852832?i=6764620445&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">7</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/ff/8f/d3/ff8fd33b-6c2b-828e-d8de-cc667897543a/mzaf_3381205570900807429.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Velour</td>
+          <td class="title">Better Than Before</td>
+          <td><a href="music://music.apple.com/at/album/better-than-before/1884614072?i=1884614081&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">8</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview112/v4/50/98/be/5098bee9-cbfe-3095-7826-9a7562802a74/mzaf_16187436214292753154.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Real Life</td>
+          <td class="title">Send Me an Angel</td>
+          <td><a href="music://music.apple.com/at/album/send-me-an-angel/425704632?i=425704669&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">9</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/b4/03/27/b4032743-e1d7-dc16-8431-b8f6ff105728/mzaf_8142396166835583540.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">NoooN Reveals</td>
+          <td class="title">Trili Frili Longsong</td>
+          <td><a href="music://music.apple.com/at/album/trili-frili-longsong/1881627189?i=1881627192&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">10</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/f9/82/e5/f982e571-aa94-4529-0a79-610e5ff98b21/mzaf_723917375319230192.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Fritz Kalkbrenner & Paul Kalkbrenner</td>
+          <td class="title">Sky and Sand</td>
+          <td><a href="music://music.apple.com/at/album/sky-and-sand/1675655151?i=1675655173&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">11</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/9d/3e/9f/9d3e9fe8-0717-7dd1-a6e5-8b9fd6bd548a/mzaf_12841281889738913217.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Paul Kalkbrenner</td>
+          <td class="title">Feed Your Head</td>
+          <td><a href="music://music.apple.com/at/album/feed-your-head/990672307?i=990672596&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">12</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/7d/7c/af/7d7caff9-9a5a-ec21-645c-80740321e98e/mzaf_17508485410186811844.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Tiggs Da Author, Turno, Beenie Man & Idris Elba</td>
+          <td class="title">Rise Again (feat. NQ)</td>
+          <td><a href="music://music.apple.com/at/album/rise-again-feat-nq/1884281654?i=1884281655&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">13</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/19/3c/d7/193cd768-15f3-5ee4-9152-6992fb5713ae/mzaf_15611150691161478267.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">DJ Asul</td>
+          <td class="title">Matadora</td>
+          <td><a href="music://music.apple.com/at/album/matadora/1840712105?i=1840712106&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">14</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/78/2c/bb/782cbb7f-a186-257a-e58f-7cb048edcffd/mzaf_991055511475828426.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Y.O.G.A. & Adam Harvey</td>
+          <td class="title">Achy Breaky Heart (Club Version)</td>
+          <td><a href="music://music.apple.com/at/album/achy-breaky-heart-club-version/1829632329?i=1829632642&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">15</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/cf/92/52/cf925219-87f4-018e-af56-c4557e1243d8/mzaf_15458635208020387810.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Bzikebi</td>
+          <td class="title">On Replay</td>
+          <td><a href="music://music.apple.com/at/album/on-replay/1886232548?i=1886232733&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">16</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/ab/e7/e7/abe7e77f-7de1-569a-37eb-7fe9fbbd12d2/mzaf_16092682292780978768.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">HOSH, 1979 & MK</td>
+          <td class="title">Midnight (The Hanging Tree) [feat. Jalja] [MK Remix]</td>
+          <td><a href="music://music.apple.com/at/album/midnight-the-hanging-tree-feat-jalja-mk-remix/1522573267?i=1522573269&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">17</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/35/fa/c4/35fac4e2-6b39-ed99-b8d0-24c86168be75/mzaf_8958823062787473546.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Good Vibes Tribe 11:11</td>
+          <td class="title">I'm Not What Happened To Me</td>
+          <td><a href="music://music.apple.com/at/album/im-not-what-happened-to-me/1858258926?i=1858258934&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">18</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/1a/ff/19/1aff19ec-5962-3cca-9df7-25a4c93a5f00/mzaf_15570330556686613493.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Secret Society</td>
+          <td class="title">Neoperreo (feat. ALIC3E)</td>
+          <td><a href="music://music.apple.com/at/album/neoperreo-feat-alic3e/1877691143?i=1877691146&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">19</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/38/85/2c/38852c61-0db5-5491-f3a9-944ff1120f56/mzaf_11629145424467649391.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">ERA</td>
+          <td class="title">Ameno</td>
+          <td><a href="music://music.apple.com/at/album/ameno/1440656366?i=1440656377&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">20</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/cb/ba/e4/cbbae403-c77f-b3b6-1f10-ae65b4d59835/mzaf_13472059001446111955.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Foals</td>
+          <td class="title">Late Night (Solomun Remix)</td>
+          <td><a href="music://music.apple.com/at/album/late-night-solomun-remix/663507458?i=663507669&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr></tbody></table></div><div class="tab-panel " id="panel-Dance"><table><tbody><tr>
+          <td class="rank">1</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/d9/b9/a6/d9b9a61a-20a9-bf91-6262-7856a944de63/mzaf_4154228047217032900.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Stick Figure & MBD</td>
+          <td class="title">Angels Above Me</td>
+          <td><a href="music://music.apple.com/at/album/angels-above-me/1896264842?i=6766280723&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">2</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/ec/6a/74/ec6a7447-d950-624c-7a14-112eb63cc581/mzaf_17453000033641943237.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">DARA</td>
+          <td class="title">Bangaranga</td>
+          <td><a href="music://music.apple.com/at/album/bangaranga/1881672023?i=1881672024&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">3</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/99/70/ce/9970ceec-3101-513d-3abd-6ce18c2b0826/mzaf_2897417920104109015.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Parov Stelar</td>
+          <td class="title">Black Lilies</td>
+          <td><a href="music://music.apple.com/at/album/black-lilies/1891400927?i=1891400928&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">4</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/20/9a/8a/209a8add-b82f-5288-3f6d-ad9633ffa7b8/mzaf_4960400866856307248.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Bebe Rexha & Faithless</td>
+          <td class="title">New Religion</td>
+          <td><a href="music://music.apple.com/at/album/new-religion/1878015313?i=1878015314&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">5</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/3a/90/39/3a903947-7714-274c-1baf-29bfe9b544dc/mzaf_17411322840972270075.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">KSK Mix House</td>
+          <td class="title">Run Like Home</td>
+          <td><a href="music://music.apple.com/at/album/run-like-home/1889088228?i=1889088229&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">6</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/53/6f/be/536fbe82-9195-55ff-8d62-c6774bd97af1/mzaf_9314475393500998759.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">DARA</td>
+          <td class="title">Bangaranga (Eurovision)</td>
+          <td><a href="music://music.apple.com/at/album/bangaranga-eurovision/6768697026?i=6768697030&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">7</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/bd/c3/d4/bdc3d494-232b-c143-6fd6-66148e3c47a6/mzaf_11885924868608134838.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">DHENYS R J</td>
+          <td class="title">All Night Long (2026)</td>
+          <td><a href="music://music.apple.com/at/album/all-night-long-2026/1895515814?i=6763834283&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">8</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/ed/89/75/ed8975cb-a4d7-92d5-fd2c-f5e62a456f43/mzaf_14612463517315972290.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Francesco Bellini & Valeri Rossi</td>
+          <td class="title">Italian Dance Mix (2026 Vol. 5)</td>
+          <td><a href="music://music.apple.com/at/album/italian-dance-mix-2026-vol-5/1892332074?i=1892332075&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">9</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/0f/74/b3/0f74b3da-c72d-a516-e3b2-b7f58b0d7c4f/mzaf_10323336380030117379.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">DJ.ILHAM</td>
+          <td class="title">What's Up</td>
+          <td><a href="music://music.apple.com/at/album/whats-up/1891100996?i=1891100997&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">10</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/cf/9e/cf/cf9ecf6a-96b9-4f88-44e2-58a4fc8ee8e9/mzaf_8363388890051173474.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Loreen</td>
+          <td class="title">Euphoria (Single Version)</td>
+          <td><a href="music://music.apple.com/at/album/euphoria-single-version/499907070?i=499907132&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">11</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/bd/7e/6a/bd7e6aa1-69c6-7f19-0467-d8b814e83bef/mzaf_7361810190450759890.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Joey Seminara & Danilo Gravina</td>
+          <td class="title">Un'Estate Italiana</td>
+          <td><a href="music://music.apple.com/at/album/unestate-italiana/1894396119?i=1894396120&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">12</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/1b/cb/4b/1bcb4bd4-0bee-83fc-d775-2cab1e51fc55/mzaf_15069762443416267825.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">The Second Voice</td>
+          <td class="title">LET ME BE</td>
+          <td><a href="music://music.apple.com/at/album/let-me-be/1884898393?i=1884898399&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">13</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/fd/31/a2/fd31a278-04a9-f556-71e4-945648119cb8/mzaf_14934539673550466452.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Par-T-One</td>
+          <td class="title">I'm So Crazy (The Cube Guys Remix)</td>
+          <td><a href="music://music.apple.com/at/album/im-so-crazy-the-cube-guys-remix/1815719796?i=1815719797&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">14</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/2d/b6/91/2db691c9-9f4b-3fb2-b231-a0b507262fbb/mzaf_15732951652587952545.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Par-T-One</td>
+          <td class="title">I'm So Crazy (CVMPANILE Remix)</td>
+          <td><a href="music://music.apple.com/at/album/im-so-crazy-cvmpanile-remix/1811966570?i=1811966572&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">15</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview114/v4/85/f1/ee/85f1ee0e-448a-8b72-a421-dc7483fcbcc9/mzaf_5556114362178171381.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Lancaster</td>
+          <td class="title">Bang Bang</td>
+          <td><a href="music://music.apple.com/at/album/bang-bang/1452295510?i=1452295566&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">16</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/df/2a/2c/df2a2c93-6791-0fda-489b-db3a34ff905b/mzaf_17631038804195239156.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">HUGEL, Topic & Arash</td>
+          <td class="title">I Adore You (feat. Daecolm)</td>
+          <td><a href="music://music.apple.com/at/album/i-adore-you-feat-daecolm/1756335923?i=1756335935&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">17</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/53/3b/54/533b5474-04d1-aad3-cf67-553d2986ff32/mzaf_2843530377246070160.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Disturbed</td>
+          <td class="title">The Sound of Silence (CYRIL Remix)</td>
+          <td><a href="music://music.apple.com/at/album/the-sound-of-silence-cyril-remix/1728492837?i=1728492838&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">18</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview112/v4/ba/f0/d8/baf0d866-95b7-7c8d-cf41-35f2d73ed206/mzaf_2211452752919190011.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Harrison</td>
+          <td class="title">All the Things She Said</td>
+          <td><a href="music://music.apple.com/at/album/all-the-things-she-said/1643178562?i=1643178563&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">19</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/56/06/b2/5606b2d3-6b0c-a3c1-58cc-9f1431fe9d5e/mzaf_5621344525650359065.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Jennifer Lopez & David Guetta</td>
+          <td class="title">Save Me Tonight</td>
+          <td><a href="music://music.apple.com/at/album/save-me-tonight/1878974339?i=1878974345&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">20</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/7d/08/22/7d0822ec-f1ac-def6-69d0-0b4f845cf039/mzaf_8668450585277292114.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Gigi D'Agostino</td>
+          <td class="title">L'amour toujours (Small Mix)</td>
+          <td><a href="music://music.apple.com/at/album/lamour-toujours-small-mix/883971254?i=883971256&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr></tbody></table></div><div class="tab-panel " id="panel-House"><table><tbody><tr>
+          <td class="rank">1</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/3a/90/39/3a903947-7714-274c-1baf-29bfe9b544dc/mzaf_17411322840972270075.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">KSK Mix House</td>
+          <td class="title">Run Like Home</td>
+          <td><a href="music://music.apple.com/at/album/run-like-home/1889088228?i=1889088229&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">2</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/bd/7e/6a/bd7e6aa1-69c6-7f19-0467-d8b814e83bef/mzaf_7361810190450759890.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Joey Seminara & Danilo Gravina</td>
+          <td class="title">Un'Estate Italiana</td>
+          <td><a href="music://music.apple.com/at/album/unestate-italiana/1894396119?i=1894396120&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">3</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/fd/31/a2/fd31a278-04a9-f556-71e4-945648119cb8/mzaf_14934539673550466452.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Par-T-One</td>
+          <td class="title">I'm So Crazy (The Cube Guys Remix)</td>
+          <td><a href="music://music.apple.com/at/album/im-so-crazy-the-cube-guys-remix/1815719796?i=1815719797&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">4</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/2d/b6/91/2db691c9-9f4b-3fb2-b231-a0b507262fbb/mzaf_15732951652587952545.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Par-T-One</td>
+          <td class="title">I'm So Crazy (CVMPANILE Remix)</td>
+          <td><a href="music://music.apple.com/at/album/im-so-crazy-cvmpanile-remix/1811966570?i=1811966572&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">5</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/89/0b/cb/890bcb21-9fec-5de4-e4a6-353ea4da4c17/mzaf_12722200383551028820.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Julien Bam</td>
+          <td class="title">Mach die Robbe (feat. die Robbe & Vincent Lee)</td>
+          <td><a href="music://music.apple.com/at/album/mach-die-robbe-feat-die-robbe-vincent-lee/1437388182?i=1437388203&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">6</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/ea/16/d1/ea16d185-6c34-ed1b-a720-6f135563bed2/mzaf_15326786000115821944.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">RavenstrikeX</td>
+          <td class="title">Say it till I fade</td>
+          <td><a href="music://music.apple.com/at/album/say-it-till-i-fade/1896129819?i=6765928029&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">7</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/14/01/e6/1401e68e-54fd-38df-547d-eb8ac1d1f173/mzaf_3684126127244040169.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Mike Mana</td>
+          <td class="title">No Fear Of Tomorrow</td>
+          <td><a href="music://music.apple.com/at/album/no-fear-of-tomorrow/1889917375?i=1889917376&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">8</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/c1/75/b6/c175b6d3-4ba1-78a3-6094-fb3280dc244a/mzaf_3683004386083276952.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Imael Angel</td>
+          <td class="title">BAD TIMES</td>
+          <td><a href="music://music.apple.com/at/album/bad-times/1894224408?i=1894224409&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">9</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/fb/aa/bd/fbaabdb4-b863-d7f6-6f14-57778dd447ad/mzaf_16027884759238099987.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">David Guetta</td>
+          <td class="title">When Love Takes Over (feat. Kelly Rowland)</td>
+          <td><a href="music://music.apple.com/at/album/when-love-takes-over-feat-kelly-rowland/699842586?i=699843064&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">10</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/06/24/89/0624897f-8518-4d29-c568-84a86c6d46fe/mzaf_14877747146087043071.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">GAMPER & DADONI & De Hofnar</td>
+          <td class="title">Oxas</td>
+          <td><a href="music://music.apple.com/at/album/oxas/694101092?i=694101136&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">11</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/bf/c3/f4/bfc3f49b-f01c-3c59-698b-2b164f0bdeb7/mzaf_13861243631716667316.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Naxxos</td>
+          <td class="title">New Orleans (Radio Edit)</td>
+          <td><a href="music://music.apple.com/at/album/new-orleans-radio-edit/1739785309?i=1739785314&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">12</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/25/8d/46/258d464a-bd24-fb22-407b-381ce579369f/mzaf_6035237771676234324.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Roger Sanchez</td>
+          <td class="title">Again</td>
+          <td><a href="music://music.apple.com/at/album/again/1740580634?i=1740580822&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">13</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/f6/2d/71/f62d7124-81d9-8db7-ba28-2f09f6d8306c/mzaf_6151202967031764773.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Harold van Lennep</td>
+          <td class="title">Liberation (Radio Edit)</td>
+          <td><a href="music://music.apple.com/at/album/liberation-radio-edit/875337040?i=875337198&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">14</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/f3/a2/fd/f3a2fd42-2a62-4dca-fe7e-71def1777240/mzaf_15068093681740225111.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Umek & Mike Vale</td>
+          <td class="title">All I Want (Dosem Remix)</td>
+          <td><a href="music://music.apple.com/at/album/all-i-want-dosem-remix/1710921761?i=1710921762&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">15</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/ff/61/85/ff6185c2-2012-8e71-acf1-0890bac6c5c1/mzaf_11401825792316960295.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Maz & VXSION</td>
+          <td class="title">Amana</td>
+          <td><a href="music://music.apple.com/at/album/amana/1734490522?i=1734490530&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">16</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview122/v4/58/e1/65/58e16578-f202-af11-9414-831b5f668634/mzaf_7120987224967684029.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Fatboy Slim</td>
+          <td class="title">Role Model (feat. Dan Diamond & Luca Guerrieri)</td>
+          <td><a href="music://music.apple.com/at/album/role-model-feat-dan-diamond-luca-guerrieri/1736094236?i=1736094243&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">17</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/4d/f6/7e/4df67e95-1ad3-17a0-3563-417a8b4c7a92/mzaf_6102281284141064089.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">DJ Koze</td>
+          <td class="title">Buschtaxi</td>
+          <td><a href="music://music.apple.com/at/album/buschtaxi/1785179804?i=1785182044&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">18</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/c4/f2/21/c4f2218c-7585-ed86-d4b5-86670dd2f182/mzaf_15647291466072623078.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Steven Roho</td>
+          <td class="title">Turn the Lights Off (Extended)</td>
+          <td><a href="music://music.apple.com/at/album/turn-the-lights-off-extended/1886696147?i=1886696454&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">19</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/78/63/ff/7863ffa8-634a-096b-8000-2ce5cb19f375/mzaf_17822313223339170052.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Folamour & Elbi San</td>
+          <td class="title">After Winter Must Come Spring</td>
+          <td><a href="music://music.apple.com/at/album/after-winter-must-come-spring/1469880784?i=1469880801&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">20</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/c0/37/14/c0371486-08e1-7711-1b57-315f4c7f9705/mzaf_15880865488093274103.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Daydream Affiliate</td>
+          <td class="title">99 Eyes</td>
+          <td><a href="music://music.apple.com/at/album/99-eyes/1848096417?i=1848096420&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr></tbody></table></div><div class="tab-panel " id="panel-Techno"><table><tbody><tr>
+          <td class="rank">1</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/fa/77/44/fa7744c8-0744-2e4c-0e21-9154a57e58e1/mzaf_17173644619806398999.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">DJ Lhasa</td>
+          <td class="title">Giulia (Gabry Ponte Rmx Fm Cut)</td>
+          <td><a href="music://music.apple.com/at/album/giulia-gabry-ponte-rmx-fm-cut/545691378?i=545691391&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">2</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/51/28/98/5128982e-c2f0-af8d-e29e-cb1008d56e6a/mzaf_7198458863420608429.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Charlotte de Witte</td>
+          <td class="title">O Movimento (feat. CERES)</td>
+          <td><a href="music://music.apple.com/at/album/o-movimento-feat-ceres/1887625722?i=1887626191&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">3</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview112/v4/39/0c/6c/390c6c06-dd63-5a93-1daa-ac7532effb8a/mzaf_8833443113420205762.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Deborah de Luca & Robert Miles</td>
+          <td class="title">Children (Radio Edit)</td>
+          <td><a href="music://music.apple.com/at/album/children-radio-edit/1633281238?i=1633281254&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">4</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/64/29/0d/64290d7d-6a76-0947-2d89-0adb9ef79ce2/mzaf_2998434433070622809.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Nicola Fasano & Miami Rockets</td>
+          <td class="title">I Like to Move It (Radio Mix)</td>
+          <td><a href="music://music.apple.com/at/album/i-like-to-move-it-radio-mix/1153539102?i=1153539495&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">5</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/19/e1/d2/19e1d2c2-750d-e3ed-81c1-75e93974645a/mzaf_10249233228240440556.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Umek</td>
+          <td class="title">Double the Lust</td>
+          <td><a href="music://music.apple.com/at/album/double-the-lust/1710922361?i=1710922362&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">6</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/5d/85/50/5d8550ee-0e88-95bc-fb7e-2d4e772198f1/mzaf_6817434472085485793.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Umek</td>
+          <td class="title">Delirium Is Family 2</td>
+          <td><a href="music://music.apple.com/at/album/delirium-is-family-2/1710922486?i=1710922487&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">7</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/1f/56/b5/1f56b52d-18fc-a92d-9ac4-14f1eb24147f/mzaf_12351956047062457350.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Umek</td>
+          <td class="title">Culminate</td>
+          <td><a href="music://music.apple.com/at/album/culminate/1710922065?i=1710922516&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">8</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/11/12/c0/1112c022-fbc5-df2a-b836-ee568b22b7ad/mzaf_4815077216507444661.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Charlotte de Witte</td>
+          <td class="title">Amor (feat. CERES)</td>
+          <td><a href="music://music.apple.com/at/album/amor-feat-ceres/1887625722?i=1887625728&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">9</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/9e/76/b4/9e76b436-72bf-ed03-60ff-a386683cefa1/mzaf_18385992864674482505.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Ollie Lishman</td>
+          <td class="title">ON SITE</td>
+          <td><a href="music://music.apple.com/at/album/on-site/1860753269?i=1860753270&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">10</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/63/89/53/63895359-ba49-55dd-7aac-59c952b60d39/mzaf_6746195844091248336.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">PCM-PureCreativeMelodies</td>
+          <td class="title">Ich bin eine Biene ! (Techno PCM Remix)</td>
+          <td><a href="music://music.apple.com/at/album/ich-bin-eine-biene-techno-pcm-remix/1797628209?i=1797628210&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">11</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/c0/62/2d/c0622d39-66f9-920b-7d86-ad32c083482c/mzaf_13101190780460558755.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Kopf & Hörer</td>
+          <td class="title">Mad World</td>
+          <td><a href="music://music.apple.com/at/album/mad-world/6767774545?i=6767774546&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">12</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/21/8d/9b/218d9bcc-5d88-a159-e4df-a0b4ce1aab04/mzaf_11805699408482155786.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Relinquo</td>
+          <td class="title">Recurrence</td>
+          <td><a href="music://music.apple.com/at/album/recurrence/1893120635?i=1893120636&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">13</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/52/27/64/522764c6-f93f-993c-1e7d-1ef6cda5b86f/mzaf_7801954563978090988.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Tao Andra</td>
+          <td class="title">Reflex (Extended Mix)</td>
+          <td><a href="music://music.apple.com/at/album/reflex-extended-mix/1889770966?i=1889770967&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">14</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/bd/e0/7b/bde07be5-658a-391b-05bf-6b0fb7fe7215/mzaf_17362593761190770529.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Obscur</td>
+          <td class="title">360 Degrees</td>
+          <td><a href="music://music.apple.com/at/album/360-degrees/1884633401?i=1884633405&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">15</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/f7/b4/6a/f7b46a2a-e43d-fb2c-720e-237d49d66eb6/mzaf_10554188495513778593.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Connor Wall</td>
+          <td class="title">Frank Lotion</td>
+          <td><a href="music://music.apple.com/at/album/frank-lotion/1831023871?i=1831024388&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">16</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/80/bf/58/80bf58ea-7c79-3b97-0935-c26b9f22045d/mzaf_4947593276934367600.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Tom Demac</td>
+          <td class="title">205 Gti</td>
+          <td><a href="music://music.apple.com/at/album/205-gti/1790735858?i=1790735861&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">17</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/7a/51/54/7a51548c-8ed8-c050-0c9a-50356386ab08/mzaf_6186159124891372708.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Lars Huismann</td>
+          <td class="title">Superfunk 1</td>
+          <td><a href="music://music.apple.com/at/album/superfunk-1/1693291470?i=1693291474&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">18</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/5c/54/fc/5c54fc3c-7038-0de9-22b1-557a86301242/mzaf_10691062290806217824.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">The Nighttripper</td>
+          <td class="title">Machine City (The Advent Mix)</td>
+          <td><a href="music://music.apple.com/at/album/machine-city-the-advent-mix/1091716548?i=1091716561&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">19</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/a7/fa/a9/a7faa923-c480-e0b7-c609-0058560f01fc/mzaf_5267128390641424664.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">The Nighttripper</td>
+          <td class="title">Machine City</td>
+          <td><a href="music://music.apple.com/at/album/machine-city/1091716548?i=1091716558&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">20</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/2f/19/e8/2f19e83d-4cbf-0162-ded4-200444d45727/mzaf_965529933077561534.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">The Nighttripper</td>
+          <td class="title">Pixote</td>
+          <td><a href="music://music.apple.com/at/album/pixote/1091716548?i=1091716556&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr></tbody></table></div><div class="tab-panel " id="panel-Trance"><table><tbody><tr>
+          <td class="rank">1</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/4c/1d/27/4c1d27d1-240e-57bf-5cfd-a689b41e57c0/mzaf_3601043006910385940.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Trampsta & Heavy Drop</td>
+          <td class="title">Harry Potter</td>
+          <td><a href="music://music.apple.com/at/album/harry-potter/1786866907?i=1786866908&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">2</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/3f/f1/74/3ff1744b-52a1-971f-a8b4-8b1f6c45c54b/mzaf_913315699419746320.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">DJ Dean & Victor F.</td>
+          <td class="title">This Is My Sound</td>
+          <td><a href="music://music.apple.com/at/album/this-is-my-sound/1895744427?i=6764351433&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">3</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/1b/20/30/1b2030b9-6356-49b5-841b-48d0de70ebb0/mzaf_6425349348543753599.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">DJ Wout, Pulsedriver & Dave McCullen</td>
+          <td class="title">Love Again (Extended Mix)</td>
+          <td><a href="music://music.apple.com/at/album/love-again-extended-mix/1895716866?i=6764286294&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">4</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview124/v4/e7/60/50/e760500d-20a8-ecd8-531c-efabd784fb2e/mzaf_10317530438032437409.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Omiki</td>
+          <td class="title">Na Le (Phaxe Remix)</td>
+          <td><a href="music://music.apple.com/at/album/na-le-phaxe-remix/1561333649?i=1561333652&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">5</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/fb/5f/bb/fb5fbb9f-5afb-df55-46d1-40c436d90582/mzaf_15399392627009237510.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">GAIA</td>
+          <td class="title">Tuvan (BLR Extended Remix)</td>
+          <td><a href="music://music.apple.com/at/album/tuvan-blr-extended-remix/6766857919?i=6766858070&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">6</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/ab/1d/f8/ab1df883-4d2e-8fb3-7b7e-1651bf596fea/mzaf_5224013186230350381.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">The Thrillseekers</td>
+          <td class="title">When Darkness Falls (Extended Mix)</td>
+          <td><a href="music://music.apple.com/at/album/when-darkness-falls-extended-mix/1891243321?i=1891243323&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">7</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/77/86/4d/77864dc0-b651-2efc-f114-4a92c807014d/mzaf_7777476722295379865.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Kichta</td>
+          <td class="title">Make it far</td>
+          <td><a href="music://music.apple.com/at/album/make-it-far/1775936372?i=1775936373&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">8</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/96/70/f7/9670f7dc-5ccf-dfad-3c2e-4f21b2266e60/mzaf_16907680621744468082.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Delerium & Sarah McLachlan</td>
+          <td class="title">Silence (Above & Beyond Remix)</td>
+          <td><a href="music://music.apple.com/at/album/silence-above-beyond-remix/1755399829?i=1755399946&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">9</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/Music69/v4/7e/9d/4e/7e9d4ef9-0cc9-5156-09e6-4e1689aad855/mzaf_7136185274114149712.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Fancy Power</td>
+          <td class="title">Lost Impact</td>
+          <td><a href="music://music.apple.com/at/album/lost-impact/1042679862?i=1042679874&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">10</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/7e/2c/92/7e2c920a-fa5a-508a-b653-bae91015f47a/mzaf_9156945031471063751.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Paul van Dyk</td>
+          <td class="title">Time of Our Lives (feat. Vega4)</td>
+          <td><a href="music://music.apple.com/at/album/time-of-our-lives-feat-vega4/1038007415?i=1038007418&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">11</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/35/a1/d8/35a1d852-8356-9a48-efdc-d6b91c17550d/mzaf_5785972703454304422.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">D.O.D</td>
+          <td class="title">So Much in Love (Armin van Buuren Remix)</td>
+          <td><a href="music://music.apple.com/at/album/so-much-in-love-armin-van-buuren-remix/1701771972?i=1701772279&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">12</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview118/v4/5c/70/cf/5c70cf51-82fe-3fd2-45e0-1d41736c991f/mzaf_6730943944471931634.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Weirdo</td>
+          <td class="title">Mystery Tour 2018 (Mix)</td>
+          <td><a href="music://music.apple.com/at/album/mystery-tour-2018-mix/1437410460?i=1437410754&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">13</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/73/c6/6d/73c66d91-7522-f1a7-659b-95d7d9c5120d/mzaf_6983036707788508372.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Anna Ullrich, Bitschu Batschu & DREAM DJ TEAM</td>
+          <td class="title">Wir haben Spass und ihr nicht (feat. Marie)</td>
+          <td><a href="music://music.apple.com/at/album/wir-haben-spass-und-ihr-nicht-feat-marie/1696011909?i=1696011912&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">14</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/67/ab/e5/67abe51c-e31a-47cc-7072-7eadb5756090/mzaf_6040577963085992766.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">DJ Misjah & Groovehead</td>
+          <td class="title">Trippin' Out</td>
+          <td><a href="music://music.apple.com/at/album/trippin-out/1430392710?i=1430392712&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">15</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/ef/c2/ad/efc2ad6e-1861-90f7-2754-f38980cc6f30/mzaf_17931256595954459080.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Bitschu Batschu</td>
+          <td class="title">Need Your Love</td>
+          <td><a href="music://music.apple.com/at/album/need-your-love/1880095992?i=1880096437&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">16</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/98/50/1a/98501a88-01d8-7089-912f-7a8847459019/mzaf_14160648059081376571.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Cosmic Baby</td>
+          <td class="title">Loops of Infinity (Gundamea Rework)</td>
+          <td><a href="music://music.apple.com/at/album/loops-of-infinity-gundamea-rework/1601202085?i=1601202086&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">17</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview123/v4/e5/f7/0f/e5f70f36-1b5d-01ec-ca82-de841c949dc5/mzaf_8104685195440554270.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Shinovi</td>
+          <td class="title">Synthetica</td>
+          <td><a href="music://music.apple.com/at/album/synthetica/1516711686?i=1516711688&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">18</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview128/v4/5d/c9/3f/5dc93fda-7bce-8ba6-6fed-cbe3a3128f5d/mzaf_5523283862760312110.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Megara Vs Dj Lee</td>
+          <td class="title">Human Nature 2K18 (Club Mix)</td>
+          <td><a href="music://music.apple.com/at/album/human-nature-2k18-club-mix/1353441295?i=1353441310&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">19</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview112/v4/e2/33/e9/e233e95e-a759-ea0d-9e7f-3c1602bea278/mzaf_3752370070910369266.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">RMB</td>
+          <td class="title">Spring (Vocal Mix)</td>
+          <td><a href="music://music.apple.com/at/album/spring-vocal-mix/890939209?i=890939216&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">20</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/07/0f/9f/070f9f2e-d57e-ee70-0439-e4432a394fec/mzaf_15421033798032164426.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Paul van Dyk</td>
+          <td class="title">For an Angel</td>
+          <td><a href="music://music.apple.com/at/album/for-an-angel/1463197954?i=1463197973&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr></tbody></table></div><div class="tab-panel " id="panel-Drum_and_Bass"><table><tbody><tr>
+          <td class="rank">1</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/63/82/ca/6382ca59-0adb-3ab1-eac9-1de93b74505b/mzaf_8483332073861020659.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Urbandawn & Tyson Kelly</td>
+          <td class="title">Come Together</td>
+          <td><a href="music://music.apple.com/at/album/come-together/1685013715?i=1685013718&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">2</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/c9/2d/99/c92d99d2-2e4a-1ef1-18d8-1bf2b8559068/mzaf_13370478457888524694.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Degs & Unglued</td>
+          <td class="title">Levitate Your Mind (VIP)</td>
+          <td><a href="music://music.apple.com/at/album/levitate-your-mind-vip/1889856534?i=1889856779&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">3</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/8d/3f/62/8d3f6272-3282-ea3b-146e-c64b766218eb/mzaf_6835415957007950997.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Mozey</td>
+          <td class="title">High Energy</td>
+          <td><a href="music://music.apple.com/at/album/high-energy/1773762710?i=1773762713&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">4</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/f5/db/ca/f5dbcacc-8980-64e8-6021-6a3e38c39b57/mzaf_13842542936818851137.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Sigma & SACHA</td>
+          <td class="title">ONLY YOU</td>
+          <td><a href="music://music.apple.com/at/album/only-you/1831216602?i=1831217452&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">5</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/27/2d/45/272d455a-2755-9b18-b92b-e342d1dec49b/mzaf_980820165820764292.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Solah & Hoax</td>
+          <td class="title">Wings</td>
+          <td><a href="music://music.apple.com/at/album/wings/1891826604?i=1891826605&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">6</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/3f/b9/54/3fb95414-a9bc-f37c-7f64-7c55e54dfc8f/mzaf_5937332963709635537.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Conrad Subs</td>
+          <td class="title">Detached</td>
+          <td><a href="music://music.apple.com/at/album/detached/1888236173?i=1888236425&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">7</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/d4/61/4d/d4614d38-256f-cca0-c404-35ebde1f9a40/mzaf_17774155915525366136.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Solah</td>
+          <td class="title">Time (Nu: Tone Remix)</td>
+          <td><a href="music://music.apple.com/at/album/time-nu-tone-remix/1878432602?i=1878432642&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">8</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/48/5f/3c/485f3c95-7141-bb3c-54d6-2f350560c6f9/mzaf_1493838613562196525.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Sigma & Mali-Koa</td>
+          <td class="title">CHEMICALS</td>
+          <td><a href="music://music.apple.com/at/album/chemicals/1831216602?i=1831217137&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">9</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/e6/20/c0/e620c0d7-d25b-ec43-1d46-e53305762c2e/mzaf_4565558994825982850.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Keeno</td>
+          <td class="title">Home Away From Home</td>
+          <td><a href="music://music.apple.com/at/album/home-away-from-home/1823972339?i=1823972639&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">10</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/e1/58/e4/e158e485-503d-4c29-36b8-bb4207821a13/mzaf_2085071737664396621.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Disorder_AT & Longman</td>
+          <td class="title">Man Vex</td>
+          <td><a href="music://music.apple.com/at/album/man-vex/1821720679?i=1821720680&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">11</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/ee/eb/e3/eeebe3ff-7945-eb33-7a5d-869089a179f9/mzaf_15585662964219022127.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">RAIDO & Gexan</td>
+          <td class="title">Shaolin Funk</td>
+          <td><a href="music://music.apple.com/at/album/shaolin-funk/1797200489?i=1797200490&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">12</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/81/c7/7e/81c77ed9-7200-e1d2-92af-079ed7cdc9ca/mzaf_1779603354374115656.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Kings Of The Rollers</td>
+          <td class="title">Chase The Lights (feat. Marns)</td>
+          <td><a href="music://music.apple.com/at/album/chase-the-lights-feat-marns/1873363702?i=1873363707&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">13</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/79/01/b4/7901b462-69a5-a8ce-6359-749e53f2804b/mzaf_6673324701023119699.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Ed Solo & MC Melo D NSS</td>
+          <td class="title">Bassline Growler</td>
+          <td><a href="music://music.apple.com/at/album/bassline-growler/1688112811?i=1688112812&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">14</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/0f/db/3c/0fdb3c73-5d4e-1225-aec3-d454a7f2c511/mzaf_11400787463571511837.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Fred V</td>
+          <td class="title">Mistakes (feat. Luxtides)</td>
+          <td><a href="music://music.apple.com/at/album/mistakes-feat-luxtides/1886098999?i=1886099003&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">15</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/2c/23/07/2c2307c2-d67d-7dd0-9fa5-ae25550d2eb5/mzaf_1938739603049106045.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Solah, Makoto, Hugh Hardie & Azotix</td>
+          <td class="title">Lovesick</td>
+          <td><a href="music://music.apple.com/at/album/lovesick/1884371588?i=1884371602&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">16</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/5c/d3/ea/5cd3ea29-2f1b-728a-4718-f435b6c334c0/mzaf_13062513278735681108.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Dub Phizix</td>
+          <td class="title">Half Life</td>
+          <td><a href="music://music.apple.com/at/album/half-life/1881171274?i=1881171275&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">17</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/ef/03/9f/ef039f39-32a4-d96e-784e-52eb502a1fb4/mzaf_2171306470016940119.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Sigma, Danny Byrd, KURUPT FM & Natty D</td>
+          <td class="title">LEGENDARY STATUS (feat. Klaudia Keziah)</td>
+          <td><a href="music://music.apple.com/at/album/legendary-status-feat-klaudia-keziah/1877923260?i=1877923267&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">18</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/4e/b4/e1/4eb4e194-cee9-0a7f-6acb-3dcd889b83ed/mzaf_3180676908214822627.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">AIRGLO & Profile</td>
+          <td class="title">Make a Move (feat. Roxi Yung)</td>
+          <td><a href="music://music.apple.com/at/album/make-a-move-feat-roxi-yung/1874244320?i=1874244321&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">19</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/22/3f/5b/223f5b9e-34a0-5010-4435-23e85240754a/mzaf_13135237094305231358.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Phibes</td>
+          <td class="title">Argument Done</td>
+          <td><a href="music://music.apple.com/at/album/argument-done/1874004550?i=1874004551&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr><tr>
+          <td class="rank">20</td>
+          <td class="preview-cell"><button class="preview-btn" onclick="togglePreview(this,'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/85/c7/84/85c78419-63e5-a0a9-950c-e3c343d44bcb/mzaf_4158813263383739774.plus.aac.p.m4a')" title="Hörprobe">&#9654;</button><audio class="preview-audio" preload="none"></audio></td>
+          <td class="artist">Fred V & WHAT EVA</td>
+          <td class="title">Horizon</td>
+          <td><a href="music://music.apple.com/at/album/horizon/1868363514?i=1868363516&uo=2" class="apple-btn">&#9835; Apple Music</a></td>
+        </tr></tbody></table></div></div>
+    </div>
+  </div>
+
+  <script>
+    let currentAudio = null;
+    let currentBtn = null;
+
+    function togglePreview(btn, url) {
+      if (currentAudio && currentBtn === btn) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        btn.innerHTML = '&#9654;';
+        btn.classList.remove('playing');
+        currentAudio = null; currentBtn = null;
+        return;
+      }
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentBtn.innerHTML = '&#9654;';
+        currentBtn.classList.remove('playing');
+      }
+      const audio = btn.nextElementSibling;
+      audio.src = url;
+      audio.play();
+      btn.innerHTML = '&#9646;&#9646;';
+      btn.classList.add('playing');
+      currentAudio = audio; currentBtn = btn;
+      audio.onended = () => {
+        btn.innerHTML = '&#9654;';
+        btn.classList.remove('playing');
+        currentAudio = null; currentBtn = null;
+      };
+    }
+
+    function showTab(id) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('panel-' + id).classList.add('active');
+      document.getElementById('btn-' + id).classList.add('active');
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentBtn.innerHTML = '&#9654;';
+        currentBtn.classList.remove('playing');
+        currentAudio = null; currentBtn = null;
+      }
+    }
+  </script>
+</body>
+</html>
